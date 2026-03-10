@@ -1,12 +1,45 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { BasicPitch, noteFramesToTime, addPitchBendsToNoteEvents, outputToNotesPoly } from "@spotify/basic-pitch";
+import { useState, useRef, useEffect } from "react";
+import { BasicPitch, noteFramesToTime, addPitchBendsToNoteEvents, outputToNotesPoly, NoteEventTime } from "@spotify/basic-pitch";
+
+
+
+function pitchToNoteName(pitch: number): string {
+  const noteNames: string[] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+  const octave: number = Math.floor(pitch / 12) - 1;
+
+  const index = pitch % 12;
+
+  return noteNames[index] + octave as string;
+
+}
+
+function midiToNoteName(midi: NoteEventTime[]): string[] {
+  const pitches = midi.map(note => note.pitchMidi);
+  const notes = pitches.map(pitch => pitchToNoteName(pitch));
+  return notes;
+}
 
 export default function Home() {
   const [status, setStatus] = useState("Drop a file to see raw note events...");
   const [notes, setNotes] = useState<unknown[] | null>(null);
+  const [noteName, setNoteName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setNoteName(pitchToNoteName(60))
+  }, [])
+
+  const handlePitchToNote = () => {
+    setNoteName(pitchToNoteName(60));
+    console.log(`Note Name of pitch: 60 is ${noteName}`)
+  }
+
+  const handlearraytonotes = (midi: NoteEventTime[]) => {
+    console.log(midiToNoteName(midi))
+  }
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -56,12 +89,20 @@ export default function Home() {
       )
     );
 
+    const filtered = result.filter((note) => {
+      return note.amplitude > 0.5   // drop low-confidence notes
+        && note.durationSeconds > 0.05;         // drop tiny blips (< 50ms)
+    });
+
     console.log("Raw notes:", result);
     console.log("First note:", result[0]);
     console.log("Total notes detected:", result.length);
+    console.log("Filtered notes:", filtered.length);
+    console.log("Type of:", typeof filtered)
 
-    setNotes(result.slice(0, 20));
-    setStatus(`Done — ${result.length} notes detected`);
+    setNotes(filtered.slice(0, 20));
+    setStatus(`Done — ${result.length} notes detected (${filtered.length} after filtering)`);
+    console.log("function test: ", midiToNoteName(filtered))
   };
 
   return (
@@ -70,6 +111,7 @@ export default function Home() {
         <h1 className="text-2xl font-semibold text-black dark:text-white">
           basic-pitch experiment
         </h1>
+        <button onClick={handlePitchToNote}>Log</button>
         <input
           ref={fileInputRef}
           type="file"
@@ -77,7 +119,7 @@ export default function Home() {
           onChange={handleFileChange}
           className="text-sm text-zinc-600 dark:text-zinc-400"
         />
-        <pre className="max-h-[600px] w-full max-w-2xl overflow-auto rounded bg-zinc-100 p-4 text-sm text-black dark:bg-zinc-900 dark:text-white">
+        <pre className="max-h-150 w-full max-w-2xl overflow-auto rounded bg-zinc-100 p-4 text-sm text-black dark:bg-zinc-900 dark:text-white">
           {notes ? JSON.stringify(notes, null, 2) : status}
         </pre>
       </main>
