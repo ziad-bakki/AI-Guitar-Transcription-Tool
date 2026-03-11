@@ -24,18 +24,11 @@ function midiToNoteName(midi: NoteEventTime[]): string[] {
 
 export default function Home() {
   const [status, setStatus] = useState("Drop a file to see raw note events...");
-  const [notes, setNotes] = useState<unknown[] | null>(null);
-  const [noteName, setNoteName] = useState<string | null>(null);
+  const [notes, setNotes] = useState<NoteEventTime[] | null>(null);
+  const [noteNames, setNoteNames] = useState<string[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    setNoteName(pitchToNoteName(60))
-  }, [])
 
-  const handlePitchToNote = () => {
-    setNoteName(pitchToNoteName(60));
-    console.log(`Note Name of pitch: 60 is ${noteName}`)
-  }
 
   const handlearraytonotes = (midi: NoteEventTime[]) => {
     console.log(midiToNoteName(midi))
@@ -102,8 +95,10 @@ export default function Home() {
 
     setNotes(filtered.slice(0, 20));
     setStatus(`Done — ${result.length} notes detected (${filtered.length} after filtering)`);
-    console.log("function test: ", midiToNoteName(filtered))
+    setNoteNames(midiToNoteName(filtered))
   };
+
+
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-black">
@@ -111,7 +106,7 @@ export default function Home() {
         <h1 className="text-2xl font-semibold text-black dark:text-white">
           basic-pitch experiment
         </h1>
-        <button onClick={handlePitchToNote}>Log</button>
+        {/* <button onClick={handlePitchToNote}>Log</button> */}
         <input
           ref={fileInputRef}
           type="file"
@@ -119,9 +114,23 @@ export default function Home() {
           onChange={handleFileChange}
           className="text-sm text-zinc-600 dark:text-zinc-400"
         />
-        <pre className="max-h-150 w-full max-w-2xl overflow-auto rounded bg-zinc-100 p-4 text-sm text-black dark:bg-zinc-900 dark:text-white">
-          {notes ? JSON.stringify(notes, null, 2) : status}
-        </pre>
+        <div className="flex justify-between items-center">
+          {notes && (
+            <><pre className="max-h-100 w-full max-w-2xl overflow-auto rounded bg-zinc-100 p-4 text-sm text-black dark:bg-zinc-900 dark:text-white">
+              {notes.map((note, i) => (
+                <div key={i}>{note.pitchMidi}</div>
+              ))
+
+              }
+              {/* {notes ? JSON.stringify(notes, null, 2) : status} */}
+            </pre><pre className="max-h-100 w-full max-w-2xl overflow-auto rounded bg-zinc-100 p-4 text-sm text-black dark:bg-zinc-900 dark:text-white">
+                {noteNames?.map((note, i) => (
+                  <div key={i}>{note}</div>
+                ))}
+              </pre></>
+          )
+          }
+        </div>
       </main>
     </div>
   );
