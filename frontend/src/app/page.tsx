@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { BasicPitch, noteFramesToTime, addPitchBendsToNoteEvents, outputToNotesPoly, NoteEventTime } from "@spotify/basic-pitch";
 import { mapNotesToFretboard, ChordVoicing } from "./guitar";
 import { detectChordsFromAudio, ChromaChordEvent } from "./chromaChords";
+import ChordChart from "./ChordChart";
 
 
 
@@ -31,6 +32,7 @@ export default function Home() {
   const [voicings, setVoicings] = useState<ChordVoicing[] | null>(null);
   const [chords, setChords] = useState<ChromaChordEvent[] | null>(null);
   const [viewMode, setViewMode] = useState<"chords" | "frets">("chords");
+  const [selectedChord, setSelectedChord] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -143,7 +145,11 @@ export default function Home() {
           <div className="w-full max-w-3xl overflow-auto max-h-[600px] rounded bg-zinc-100 p-4 text-sm text-black dark:bg-zinc-900 dark:text-white">
             <div className="flex flex-wrap gap-3">
               {chords.map((c, i) => (
-                <div key={i} className="flex flex-col items-center rounded bg-zinc-200 dark:bg-zinc-800 px-4 py-3 min-w-[80px]">
+                <div
+                  key={i}
+                  className="flex flex-col items-center rounded bg-zinc-200 dark:bg-zinc-800 px-4 py-3 min-w-[80px] cursor-pointer hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors"
+                  onClick={() => setSelectedChord(c.chordName)}
+                >
                   <span className="text-lg font-bold">{c.chordName}</span>
                   <span className="text-xs text-zinc-500 font-mono mt-1">
                     {c.startTime.toFixed(1)}s – {c.endTime.toFixed(1)}s
@@ -196,6 +202,9 @@ export default function Home() {
           </div>
         )}
       </main>
+      {selectedChord && (
+        <ChordChart chordName={selectedChord} onClose={() => setSelectedChord(null)} />
+      )}
     </div>
   );
 }
