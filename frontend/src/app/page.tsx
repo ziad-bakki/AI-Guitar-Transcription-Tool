@@ -2,8 +2,8 @@
 
 import { useState, useRef } from "react";
 import { BasicPitch, noteFramesToTime, addPitchBendsToNoteEvents, outputToNotesPoly, NoteEventTime } from "@spotify/basic-pitch";
-import { mapNotesToFretboard, ChordVoicing, groupNotesIntoChords } from "./guitar";
-import { mergeConsecutiveChords, ChordEvent } from "./chords";
+import { mapNotesToFretboard, ChordVoicing } from "./guitar";
+import { detectChordsFromAudio, ChromaChordEvent } from "./chromaChords";
 
 
 
@@ -29,7 +29,7 @@ export default function Home() {
   const [notes, setNotes] = useState<NoteEventTime[] | null>(null);
   const [noteNames, setNoteNames] = useState<string[] | null>(null);
   const [voicings, setVoicings] = useState<ChordVoicing[] | null>(null);
-  const [chords, setChords] = useState<ChordEvent[] | null>(null);
+  const [chords, setChords] = useState<ChromaChordEvent[] | null>(null);
   const [viewMode, setViewMode] = useState<"chords" | "frets">("chords");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -95,19 +95,13 @@ export default function Home() {
     const fretVoicings = mapNotesToFretboard(filtered);
     console.log("Voicings:", fretVoicings);
 
-    // Build chord events from note groups
-    const groups = groupNotesIntoChords(filtered);
-    const chordGroups = groups.map(g => ({
-      startTime: Math.min(...g.map(n => n.startTimeSeconds)),
-      endTime: Math.max(...g.map(n => n.startTimeSeconds + n.durationSeconds)),
-      midiNotes: g.map(n => n.pitchMidi),
-    }));
-    const chordEvents = mergeConsecutiveChords(chordGroups);
-    console.log("Chords:", chordEvents);
+    // Chroma-based chord detection directly from audio
+    const chromaChords = detectChordsFromAudio(monoData, 22050);
+    console.log("Chroma chords:", chromaChords);
 
     setNotes(filtered.slice(0, 20));
     setVoicings(fretVoicings);
-    setChords(chordEvents);
+    setChords(chromaChords);
     setStatus(`Done — ${result.length} notes detected (${filtered.length} after filtering)`);
     setNoteNames(midiToNoteName(filtered))
   };
@@ -148,11 +142,14 @@ export default function Home() {
         {viewMode === "chords" && chords && chords.length > 0 && (
           <div className="w-full max-w-3xl overflow-auto max-h-[600px] rounded bg-zinc-100 p-4 text-sm text-black dark:bg-zinc-900 dark:text-white">
             <div className="flex flex-wrap gap-3">
-              {chords.filter(c => c.chordName).map((c, i) => (
+              {chords.map((c, i) => (
                 <div key={i} className="flex flex-col items-center rounded bg-zinc-200 dark:bg-zinc-800 px-4 py-3 min-w-[80px]">
                   <span className="text-lg font-bold">{c.chordName}</span>
                   <span className="text-xs text-zinc-500 font-mono mt-1">
                     {c.startTime.toFixed(1)}s – {c.endTime.toFixed(1)}s
+                  </span>
+                  <span className="text-xs text-zinc-400 mt-0.5">
+                    {Math.round(c.confidence * 100)}%
                   </span>
                 </div>
               ))}
