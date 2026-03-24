@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { BasicPitch, noteFramesToTime, addPitchBendsToNoteEvents, outputToNotesPoly, NoteEventTime } from "@spotify/basic-pitch";
 import { mapNotesToFretboard, ChordVoicing } from "./guitar";
 import { detectChordsFromAudio, ChromaChordEvent } from "./chromaChords";
+import { buildTabGrid } from "./tabGenerator";
 import ChordChart from "./ChordChart";
 
 
@@ -31,7 +32,7 @@ export default function Home() {
   const [noteNames, setNoteNames] = useState<string[] | null>(null);
   const [voicings, setVoicings] = useState<ChordVoicing[] | null>(null);
   const [chords, setChords] = useState<ChromaChordEvent[] | null>(null);
-  const [viewMode, setViewMode] = useState<"chords" | "frets">("chords");
+  const [viewMode, setViewMode] = useState<"chords" | "frets" | "tab">("chords");
   const [selectedChord, setSelectedChord] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -138,6 +139,12 @@ export default function Home() {
             >
               Fret Details
             </button>
+            <button
+              onClick={() => setViewMode("tab")}
+              className={`px-3 py-1 rounded text-sm ${viewMode === "tab" ? "bg-zinc-800 text-white dark:bg-white dark:text-black" : "bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"}`}
+            >
+              Tab
+            </button>
           </div>
         )}
 
@@ -201,6 +208,60 @@ export default function Home() {
             </table>
           </div>
         )}
+        {viewMode === "tab" && voicings && voicings.length > 0 && (() => {
+          const tabData = buildTabGrid(voicings);
+          // Split into lines of 16 columns for readability
+          const LINE_SIZE = 16;
+          const totalCols = tabData.times.length;
+          const lineCount = Math.ceil(totalCols / LINE_SIZE);
+
+          return (
+            <div className="w-full max-w-4xl overflow-auto max-h-[600px] rounded bg-zinc-100 p-4 text-sm text-black dark:bg-zinc-900 dark:text-white">
+              {Array.from({ length: lineCount }, (_, lineIdx) => {
+                const start = lineIdx * LINE_SIZE;
+                const end = Math.min(start + LINE_SIZE, totalCols);
+
+                return (
+                  <div key={lineIdx} className="mb-6">
+                    {/* Time markers */}
+                    <div className="flex font-mono text-[10px] text-zinc-400 mb-0.5">
+                      <span className="w-5 shrink-0" />
+                      {tabData.times.slice(start, end).map((t, i) => (
+                        <span key={i} className="w-10 text-center shrink-0">
+                          {t.toFixed(1)}s
+                        </span>
+                      ))}
+                    </div>
+                    {/* Tab grid */}
+                    {tabData.strings.map((s, row) => (
+                      <div key={row} className="flex font-mono leading-tight">
+                        <span className="w-5 text-right pr-1 text-zinc-500 shrink-0 font-bold">
+                          {s.label}
+                        </span>
+                        <span className="text-zinc-600 dark:text-zinc-500">|</span>
+                        {s.frets.slice(start, end).map((fret, col) => (
+                          <span
+                            key={col}
+                            className={`w-10 text-center shrink-0 ${
+                              fret === null
+                                ? "text-zinc-300 dark:text-zinc-700"
+                                : fret === 0
+                                  ? "text-green-600 dark:text-green-400 font-bold"
+                                  : "text-white dark:text-amber-300 font-bold"
+                            }`}
+                          >
+                            {fret === null ? "—" : fret}
+                          </span>
+                        ))}
+                        <span className="text-zinc-600 dark:text-zinc-500">|</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
       </main>
       {selectedChord && (
         <ChordChart chordName={selectedChord} onClose={() => setSelectedChord(null)} />

@@ -48,6 +48,49 @@ function pitchToNoteName(pitch: number): string {
 }
 
 /**
+ * Remove re-detections of notes that are still ringing from a previous onset.
+ * BasicPitch often splits a sustained note into multiple shorter events.
+ * If a note with the same pitch starts while a prior detection is still
+ * sounding (or within a small tolerance), keep only the first occurrence
+ * and extend its duration.
+ */
+function deduplicateSustains(notes: NoteEventTime[]): NoteEventTime[] {
+  if (notes.length === 0) return [];
+
+  const sorted = [...notes].sort((a, b) => a.startTimeSeconds - b.startTimeSeconds);
+
+  // Track the latest active note per MIDI pitch
+  const activeByPitch = new Map<number, NoteEventTime>();
+  const result: NoteEventTime[] = [];
+
+  for (const note of sorted) {
+    const active = activeByPitch.get(note.pitchMidi);
+    const activeEnd = active
+      ? active.startTimeSeconds + active.durationSeconds
+      : -Infinity;
+
+    // If a previous detection of this exact pitch is still ringing
+    // (or ended within a small tolerance), it's a sustain re-detection —
+    // extend the original rather than creating a new note.
+    if (active && note.startTimeSeconds <= activeEnd + 0.3) {
+      const newEnd = Math.max(
+        activeEnd,
+        note.startTimeSeconds + note.durationSeconds
+      );
+      (active as { durationSeconds: number }).durationSeconds =
+        newEnd - active.startTimeSeconds;
+    } else {
+      // Genuine new onset — clone so we can safely mutate duration
+      const clone = { ...note };
+      result.push(clone);
+      activeByPitch.set(note.pitchMidi, clone);
+    }
+  }
+
+  return result;
+}
+
+/**
  * Group notes into chords based on overlapping start times.
  * Notes starting within `threshold` seconds of each other form a group.
  */
@@ -55,9 +98,10 @@ export function groupNotesIntoChords(
   notes: NoteEventTime[],
   threshold = 0.25
 ): NoteEventTime[][] {
-  if (notes.length === 0) return [];
+  const deduplicated = deduplicateSustains(notes);
+  if (deduplicated.length === 0) return [];
 
-  const sorted = [...notes].sort((a, b) => a.startTimeSeconds - b.startTimeSeconds);
+  const sorted = [...deduplicated].sort((a, b) => a.startTimeSeconds - b.startTimeSeconds);
   const groups: NoteEventTime[][] = [[sorted[0]]];
 
   for (let i = 1; i < sorted.length; i++) {
@@ -184,6 +228,52 @@ export function findOptimalVoicing(
 /**
  * Main entry: takes detected notes and returns optimized chord voicings.
  */
+/**
+ * Get the sorted pitch class set for a voicing (used to detect duplicates).
+ */
+function getPitchClassKey(positions: FretPosition[]): string {
+  return positions
+    .map(p => p.midiNote % 12)
+    .sort((a, b) => a - b)
+    .join(",");
+}
+
+/**
+ * Merge consecutive voicings that share the same pitch classes.
+ * A ringing chord produces repeated detections — collapse them into one
+ * voicing with an extended time range. Allows a small gap between
+ * consecutive detections to account for detection jitter.
+ */
+function mergeConsecutiveVoicings(
+  voicings: ChordVoicing[],
+  maxGap = 0.5
+): ChordVoicing[] {
+  if (voicings.length === 0) return [];
+
+  const merged: ChordVoicing[] = [voicings[0]];
+
+  for (let i = 1; i < voicings.length; i++) {
+    const prev = merged[merged.length - 1];
+    const cur = voicings[i];
+
+    const prevKey = getPitchClassKey(prev.positions);
+    const curKey = getPitchClassKey(cur.positions);
+    const gap = cur.startTime - prev.endTime;
+
+    if (prevKey === curKey && gap <= maxGap) {
+      // Same pitch classes, extend the previous voicing
+      prev.endTime = Math.max(prev.endTime, cur.endTime);
+    } else {
+      merged.push(cur);
+    }
+  }
+
+  return merged;
+}
+
+/**
+ * Main entry: takes detected notes and returns optimized chord voicings.
+ */
 export function mapNotesToFretboard(notes: NoteEventTime[]): ChordVoicing[] {
   const groups = groupNotesIntoChords(notes);
   const voicings: ChordVoicing[] = [];
@@ -209,5 +299,5 @@ export function mapNotesToFretboard(notes: NoteEventTime[]): ChordVoicing[] {
     prevPositions = positions;
   }
 
-  return voicings;
+  return mergeConsecutiveVoicings(voicings);
 }
